@@ -3,10 +3,12 @@ import subprocess
 import re
 from tqdm import tqdm
 import csv
+import nmap
 import traceback
 import sys
 import time
 import argparse
+import concurrent.futures
 
 
 def get_local_ipv4():
@@ -46,22 +48,18 @@ def scan_windows_machines(subnet, target_count=3):
     return windows_machines
 
 
-def deploy_script(ip, script_path, username, password):
-    copy_command = f"psexec \\\\{ip} -u {username} -p {password} -c -f {script_path}"
+def deploy_and_run_script(ip, file_path, username, password):
+    copy_command = f"psexec \\\\{ip} -u {username} -p {password} -c -f {file_path}"
     copy_result = os.system(copy_command)
-    return copy_result
 
-
-def execute_script(ip, script_path, username, password):
-    run_command = f"psexec \\\\{ip} -u {username} -p {password} -i -d python.exe {os.path.basename(script_path)}"
-    run_result = os.system(run_command)
-    return run_result
-
-
-def remove_script(ip, script_path, username, password):
-    delete_command = f"psexec \\\\{ip} -u {username} -p {password} cmd /c del {os.path.basename(script_path)}"
-    delete_result = os.system(delete_command)
-    return delete_result
+    if copy_result == 0:
+        run_command = f"psexec \\\\{ip} -u {username} -p {password} -i -d {os.path.basename(file_path)}"
+        run_result = os.system(run_command)
+        delete_command = f"psexec \\\\{ip} -u {username} -p {password} cmd /c del {os.path.basename(file_path)}"
+        os.system(delete_command)
+        return run_result
+    else:
+        return 1
 
 
 def main():
@@ -94,28 +92,22 @@ def main():
     username = args.username
     password = args.password
 
-    for ip in tqdm(windows_machines, desc="Executing file", unit="machine"):
-        print(f"Deploying and running script on {ip}")
-
-        hostname = subprocess.getoutput(f"psexec \\\\{ip} -u {username} -p {password} cmd /c hostname").strip()
-
-        copy_result = deploy_script(ip, script_path, username, password)
-
-        if copy_result == 0:
-            run_command = f"psexec \\\\{ip} -u {username} -p {password} -i -d {os.path.basename(file_path)}"
-            run_result = os.system(run_command)
-
-            if run_result == 0:
-                successful_executions += 1
-                execution_results.append([hostname, "Successful"])
-            else:
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = {executor.submit(deploy_and_run_script, ip, file_path, username, password): ip for ip in windows_machines}
+        for future in tqdm(concurrent.futures.as_completed(futures), total=total_machines, desc="Executing file", unit="machine"):
+            ip = futures[future]
+            try:
+                run_result = future.result()
+                hostname = subprocess.getoutput(f"psexec \\\\{ip} -u {username} -p {password} cmd /c hostname").strip()
+                if run_result == 0:
+                    successful_executions += 1
+                    execution_results.append([hostname, "Successful"])
+                else:
+                    failed_executions += 1
+                    execution_results.append([hostname, "Failed"])
+            except Exception as e:
                 failed_executions += 1
-                execution_results.append([hostname, "Failed"])
-
-            remove_result = remove_script(ip, script_path, username, password)
-        else:
-            failed_executions += 1
-            execution_results.append([hostname, "Failed"])
+                execution_results.append([ip, "Failed"])
 
     print(f"Script execution completed on all detected Windows machines.")
     print(f"Total successful executions: {successful_executions}")
