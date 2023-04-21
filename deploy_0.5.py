@@ -64,7 +64,7 @@ def remove_script(ip, script_path, username, password):
     return delete_result
 
 
-ddef main():
+def main():
     parser = argparse.ArgumentParser(description="Execute a script or program on remote Windows machines")
     parser.add_argument("-u", "--username", required=True, help="Username for the remote Windows machine")
     parser.add_argument("-p", "--password", required=True, help="Password for the remote Windows machine")
