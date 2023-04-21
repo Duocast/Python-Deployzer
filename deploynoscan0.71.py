@@ -72,7 +72,7 @@ def main():
     parser.add_argument("-s", "--service-name", required=True, help="Service name for the keyring password storage")
     parser.add_argument("file_path", help="Path to the script or program to run on the remote Windows machines")
     parser.add_argument("-t", "--targets", help="File containing the target IP addresses (skips network scan)")
-    parser.add_argument('--version', action='version', version='%(prog)s 0.60')
+    parser.add_argument('--version', action='version', version='%(prog)s 0.71')
     
     args = parser.parse_args()
 
