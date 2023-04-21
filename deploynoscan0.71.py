@@ -67,13 +67,12 @@ def deploy_and_run_script(ip, file_path, username, password):
 
 
 def main():
-    check_nmap_availability()
     parser = argparse.ArgumentParser(description="Execute a script or program on remote Windows machines")
     parser.add_argument("-u", "--username", required=True, help="Username for the remote Windows machine")
     parser.add_argument("-s", "--service-name", required=True, help="Service name for the keyring password storage")
     parser.add_argument("file_path", help="Path to the script or program to run on the remote Windows machines")
     parser.add_argument("-t", "--targets", help="File containing the target IP addresses (skips network scan)")
-    parser.add_argument('--version', action='version', version='%(prog)s 0.71')
+    parser.add_argument('--version', action='version', version='%(prog)s 0.60')
     
     args = parser.parse_args()
 
