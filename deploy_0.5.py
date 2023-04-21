@@ -3,12 +3,11 @@ import subprocess
 import re
 from tqdm import tqdm
 import csv
-import nmap
 import traceback
 import sys
 import time
 import argparse
-import concurrent.futures
+from concurrent.futures import ThreadPoolExecutor
 
 
 def get_local_ipv4():
