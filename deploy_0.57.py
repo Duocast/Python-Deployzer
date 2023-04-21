@@ -14,7 +14,10 @@ import keyring
 def get_local_ipv4():
     local_ip = subprocess.getoutput("ipconfig" if os.name == 'nt' else "ifconfig")
     ipv4 = re.findall(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", local_ip)
-    return [ip for ip in ipv4 if not ip.startswith('127.') and not ip.startswith('169.254.')][0]
+    valid_ips = [ip for ip in ipv4 if not ip.startswith('127.') and not ip.startswith('169.254.')]
+    if len(valid_ips) == 0:
+        raise ValueError("No valid local IPv4 address found.")
+    return valid_ips[0]
 
 
 def get_subnet(ipv4):
@@ -29,11 +32,19 @@ def get_subnet(ipv4):
         raise ValueError("Invalid IP address for private network.")
     return subnet
 
+def check_nmap_availability():
+    nmap_path = shutil.which("nmap")
+    if nmap_path is None:
+        raise RuntimeError("nmap not found. Please make sure it is installed and added to the PATH.")
+    return nmap_path
 
 def scan_windows_machines(subnet, target_count=3):
     nmap_args = f'nmap -p 139,445 --open -O --osscan-guess -v -oG - {subnet}'
     start_time = time.time()
-    nmap_output = subprocess.run(nmap_args, shell=True, capture_output=True, text=True)
+    try:
+        nmap_output = subprocess.run(nmap_args, shell=True, capture_output=True, text=True)
+    except Exception as e:
+        raise RuntimeError(f"Error running nmap command: {e}")
 
     windows_machines = []
     for line in nmap_output.stdout.splitlines():
@@ -50,13 +61,13 @@ def scan_windows_machines(subnet, target_count=3):
 
 def deploy_and_run_script(ip, file_path, username, password):
     copy_command = f"psexec \\\\{ip} -u {username} -p {password} -c -f {file_path}"
-    copy_result = os.system(copy_command)
+    copy_result = subprocess.call(copy_command, shell=True)
 
     if copy_result == 0:
         run_command = f"psexec \\\\{ip} -u {username} -p {password} -i -d {os.path.basename(file_path)}"
-        run_result = os.system(run_command)
+        run_result = subprocess.call(run_command, shell=True)
         delete_command = f"psexec \\\\{ip} -u {username} -p {password} cmd /c del {os.path.basename(file_path)}"
-        os.system(delete_command)
+        subprocess.call(delete_command, shell=True)
         return run_result
     else:
         return 1
@@ -74,7 +85,7 @@ def main():
 
     if not os.path.exists(file_path):
         print(f"File not found: {file_path}")
-        exit(1)
+        return
 
     ipv4 = get_local_ipv4()
     subnet = get_subnet(ipv4)
@@ -95,7 +106,7 @@ def main():
 
     if password is None:
         print(f"No password found in keyring for service '{service_name}' and username '{username}'")
-        sys.exit(1)
+        return
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = {executor.submit(deploy_and_run_script, ip, file_path, username, password): ip for ip in windows_machines}
