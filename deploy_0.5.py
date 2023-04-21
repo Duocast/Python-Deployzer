@@ -8,6 +8,7 @@ import sys
 import time
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+import keyring
 
 
 def get_local_ipv4():
@@ -64,7 +65,7 @@ def deploy_and_run_script(ip, file_path, username, password):
 def main():
     parser = argparse.ArgumentParser(description="Execute a script or program on remote Windows machines")
     parser.add_argument("-u", "--username", required=True, help="Username for the remote Windows machine")
-    parser.add_argument("-p", "--password", required=True, help="Password for the remote Windows machine")
+    parser.add_argument("-s", "--service-name", required=True, help="Service name for the keyring password storage")
     parser.add_argument("file_path", help="Path to the script or program to run on the remote Windows machines")
 
     args = parser.parse_args()
@@ -89,7 +90,12 @@ def main():
     print(f"Total machines found: {total_machines}")
 
     username = args.username
-    password = args.password
+    service_name = args.service_name
+    password = keyring.get_password(service_name, username)
+
+    if password is None:
+        print(f"No password found in keyring for service '{service_name}' and username '{username}'")
+        sys.exit(1)
 
     with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = {executor.submit(deploy_and_run_script, ip, file_path, username, password): ip for ip in windows_machines}
