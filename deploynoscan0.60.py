@@ -32,30 +32,22 @@ def get_subnet(ipv4):
         raise ValueError("Invalid IP address for private network.")
     return subnet
 
-def check_nmap_availability():
-    nmap_path = shutil.which("nmap")
-    if nmap_path is None:
-        raise RuntimeError("nmap not found. Please make sure it is installed and added to the PATH.")
-    return nmap_path
 
-def scan_windows_machines(subnet, target_count=3):
+def scan_windows_machines(subnet):
     nmap_args = f'nmap -p 139,445 --open -O --osscan-guess -v -oG - {subnet}'
-    start_time = time.time()
     try:
-        nmap_output = subprocess.run(nmap_args, shell=True, capture_output=True, text=True)
+        nmap_proc = subprocess.Popen(nmap_args, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     except Exception as e:
         raise RuntimeError(f"Error running nmap command: {e}")
 
     windows_machines = []
-    for line in nmap_output.stdout.splitlines():
-        if 'Windows' in line:
-            match = re.search(r'(\d+\.\d+\.\d+\.\d+)', line)
+    for line in iter(nmap_proc.stdout.readline, b''):
+        print(line.decode().strip())
+        if 'Windows' in line.decode():
+            match = re.search(r'(\d+\.\d+\.\d+\.\d+)', line.decode())
             if match:
                 windows_machines.append(match.group(1))
-                if len(windows_machines) >= target_count:
-                    break
 
-    elapsed_time = time.time() - start_time
     return windows_machines
 
 
@@ -74,12 +66,14 @@ def deploy_and_run_script(ip, file_path, username, password):
 
 
 def main():
+    check_nmap_availability()
     parser = argparse.ArgumentParser(description="Execute a script or program on remote Windows machines")
     parser.add_argument("-u", "--username", required=True, help="Username for the remote Windows machine")
     parser.add_argument("-s", "--service-name", required=True, help="Service name for the keyring password storage")
     parser.add_argument("file_path", help="Path to the script or program to run on the remote Windows machines")
     parser.add_argument("-t", "--targets", help="File containing the target IP addresses (skips network scan)")
-
+    parser.add_argument('--version', action='version', version='%(prog)s 0.60')
+    
     args = parser.parse_args()
 
     file_path = args.file_path
@@ -88,16 +82,15 @@ def main():
         print(f"File not found: {file_path}")
         exit(1)
 
+    ipv4 = get_local_ipv4()
+    subnet = get_subnet(ipv4)
+
     if args.targets:
-        if not os.path.exists(args.targets):
-            print(f"Targets file not found: {args.targets}")
-            exit(1)
-        with open(args.targets) as f:
-            windows_machines = [line.strip() for line in f]
+        with open(args.targets, 'r') as target_file:
+            windows_machines = [line.strip() for line in target_file.readlines()]
+            print(f"Using target IPs from file: {args.targets}")
     else:
-        ipv4 = get_local_ipv4()
-        subnet = get_subnet(ipv4)
-        print("Scanning the network for the first 3 Windows machines...")
+        print("Scanning the network for Windows machines...")
         windows_machines = scan_windows_machines(subnet)
 
     total_machines = len(windows_machines)
