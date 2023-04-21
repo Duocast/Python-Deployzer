@@ -64,18 +64,18 @@ def remove_script(ip, script_path, username, password):
     return delete_result
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Execute a Python script on remote Windows machines")
+ddef main():
+    parser = argparse.ArgumentParser(description="Execute a script or program on remote Windows machines")
     parser.add_argument("-u", "--username", required=True, help="Username for the remote Windows machine")
     parser.add_argument("-p", "--password", required=True, help="Password for the remote Windows machine")
-    parser.add_argument("script_path", help="Path to the Python script to run on the remote Windows machines")
+    parser.add_argument("file_path", help="Path to the script or program to run on the remote Windows machines")
 
     args = parser.parse_args()
 
-    script_path = args.script_path
+    file_path = args.file_path
 
-    if not os.path.exists(script_path):
-        print(f"Script not found: {script_path}")
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
         exit(1)
 
     ipv4 = get_local_ipv4()
@@ -94,7 +94,7 @@ def main():
     username = args.username
     password = args.password
 
-    for ip in tqdm(windows_machines, desc="Executing script", unit="machine"):
+    for ip in tqdm(windows_machines, desc="Executing file", unit="machine"):
         print(f"Deploying and running script on {ip}")
 
         hostname = subprocess.getoutput(f"psexec \\\\{ip} -u {username} -p {password} cmd /c hostname").strip()
@@ -102,7 +102,8 @@ def main():
         copy_result = deploy_script(ip, script_path, username, password)
 
         if copy_result == 0:
-            run_result = execute_script(ip, script_path, username, password)
+            run_command = f"psexec \\\\{ip} -u {username} -p {password} -i -d {os.path.basename(file_path)}"
+            run_result = os.system(run_command)
 
             if run_result == 0:
                 successful_executions += 1
